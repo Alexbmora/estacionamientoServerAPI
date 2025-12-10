@@ -12,72 +12,71 @@ export const subirFoto = (req, res) => {
     size: req.file.size
   };
 
-  const sql = `INSERT INTO fotos (nombre_original, nombre_guardado, ruta, mimetype, size) VALUES (?, ?, ?, ?, ?)`;
-  
+  const sql = `CALL sp_subir_foto(?, ?, ?, ?, ?)`;
+
   db.query(sql, [data.nombre_original, data.nombre_guardado, data.ruta, data.mimetype, data.size], (err, result) => {
-      if (err) {
-        console.error('Error en BD:', err);
-        return res.status(500).json({ error: 'Error guardando en BD' });
-      }
-      data.id = result.insertId;
-      res.json({ mensaje: 'Foto subida correctamente', foto: data });
+    if (err) {
+      console.error('Error en BD:', err);
+      return res.status(500).json({ error: 'Error guardando en BD' });
     }
+
+    data.id = result.insertId;
+    const io = req.app.get('io');
+
+    io.emit('nueva-foto', {
+      id: data.id,
+      nombre_guardado: data.nombre_guardado,
+    });
+
+    res.json({ mensaje: 'Foto subida correctamente', foto: data });
+  }
   );
 };
+
+export const descargarFotoData = (req, res) => {
+  const filename = req.params.filename;
+  // Seguridad básica de rutas
+  if (filename.includes('..') || filename.includes('/')) {
+    return res.status(400).json({ error: 'Ruta inválida' });
+  }
+
+  const filePath = path.join(UPLOADS_DIR, filename);
+
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).json({ error: 'Imagen no encontrada en servidor' });
+  }
+};
+
+export const notificarResultadoFoto = (req, res) => {
+  const { id, resultado } = req.body;
+
+  if (!id || !resultado) {
+    return res.status(400).json({ error: 'Faltan datos' });
+  }
+
+  try {
+    const io = req.app.get('io');
+    io.emit('foto_procesada', {
+      foto_id: id,          // Para que Android sepa qué foto es
+      resultado: resultado,      // "Docente", "Alumno", "Personal", "Desconocido"
+    });
+
+    console.log(`📡 Relay WS: Resultado '${resultado}' enviado a Android (ID: ${id})`);
+
+    // Respondemos a Python para que sepa que el mensaje se entregó
+    res.json({ mensaje: "Notificación retransmitida a Android correctamente" });
+
+  } catch (error) {
+    console.error("Error al emitir WebSocket:", error);
+    res.status(500).json({ error: "Error interno al notificar" });
+  }
+}
 
 export const listarFotos = (req, res) => {
   db.query('SELECT * FROM fotos ORDER BY id DESC', (err, rows) => {
     if (err) return res.status(500).json({ error: 'Error consultando BD' });
     res.json(rows);
   });
-};
-
-export const procesarFotoML = (req, res) => {
-  const { foto_id, resultado, confianza, foto_procesada, id_turno, crearEntrada } = req.body;
-
-  if (!foto_id || !resultado) return res.status(400).json({ error: 'Faltan campos: foto_id y resultado' });
-
-  const sqlClasif = `INSERT INTO clasificaciones (id_foto, resultado, confianza, foto_procesada) VALUES (?, ?, ?, ?)`;
-
-  db.query(sqlClasif, [foto_id, resultado, confianza || null, foto_procesada || null], (errClasif, resultClasif) => {
-      if (errClasif) {
-        console.error("Error en clasificaciones, probando respuestas_ml:", errClasif);
-        // Fallback
-        const sqlSimple = `INSERT INTO respuestas_ml (foto_id, resultado) VALUES (?, ?)`;
-        return db.query(sqlSimple, [foto_id, resultado], (err2, result2) => {
-          if (err2) return res.status(500).json({ error: "Error guardando respuesta ML" });
-          return res.json({ mensaje: "Respuesta ML guardada (respuestas_ml)", id_respuesta: result2.insertId });
-        });
-      }
-
-      // Si se pidió crear entrada en el estacionamiento
-      if (crearEntrada) {
-        db.query(`INSERT INTO entradas (id_turno, id_foto, tipo) VALUES (?, ?, ?)`,
-          [id_turno || null, foto_id, resultado],
-          (err3) => err3 && console.error("Error creando entrada:", err3)
-        );
-      }
-
-      res.json({ mensaje: "Respuesta ML guardada (clasificaciones)", id_clasificacion: resultClasif.insertId });
-    }
-  );
-};
-
-export const obtenerResultadoFoto = (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    
-    // Lógica compleja de consulta aquí (tu código original)...
-    const sqlClasif = `SELECT id_foto AS foto_id, resultado, confianza, foto_procesada, procesado_en FROM clasificaciones WHERE id_foto = ? ORDER BY procesado_en DESC LIMIT 1`;
-
-    db.query(sqlClasif, [id], (err, rows) => {
-        if (err) return res.status(500).json({ error: 'Error BD' });
-        if (rows.length > 0) return res.json(rows[0]);
-
-        const sqlSimple = `SELECT foto_id, resultado, fecha FROM respuestas_ml WHERE foto_id = ? ORDER BY fecha DESC LIMIT 1`;
-        db.query(sqlSimple, [id], (err2, rows2) => {
-             if (err2) return res.status(500).json({ error: 'Error BD' });
-             if (rows2.length > 0) return res.json(rows2[0]);
-             res.status(404).json({ foto_id: id, resultado: null, mensaje: "Sin clasificación" });
-        });
-    });
 };

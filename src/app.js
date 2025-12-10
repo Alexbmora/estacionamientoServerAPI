@@ -3,11 +3,15 @@ import cors from 'cors';
 import { UPLOADS_DIR } from './middlewares/upload.js';
 import fotoRoutes from './routes/fotoRoutes.js';
 import turnoRoutes from './routes/turnoRoutes.js';
+import morgan from 'morgan';
+
 
 const app = express();
 
+
 // Middlewares Globales
 app.use(express.json());
+app.use(morgan('dev'));
 app.use(cors());
 
 // Servir estáticos
@@ -19,7 +23,7 @@ app.use('/api', turnoRoutes);
 
 // Ruta Health Check
 app.get('/get', (req, res) => {
-    res.send('Servidor activo y modularizado 🚀');
+    res.send('Modulo Server activo');
 });
 
 export default app;
