@@ -3,6 +3,7 @@ import cors from 'cors';
 import { UPLOADS_DIR } from './middlewares/upload.js';
 import fotoRoutes from './routes/fotoRoutes.js';
 import turnoRoutes from './routes/turnoRoutes.js';
+import entradaRoutes from './routes/entradaRoutes.js';
 import morgan from 'morgan';
 
 
@@ -20,6 +21,7 @@ app.use('/uploads', express.static(UPLOADS_DIR));
 // Rutas
 app.use('/api', fotoRoutes);
 app.use('/api', turnoRoutes);
+app.use('/api', entradaRoutes); 
 
 // Ruta Health Check
 app.get('/get', (req, res) => {

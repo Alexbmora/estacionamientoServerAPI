@@ -23,6 +23,8 @@ export const subirFoto = (req, res) => {
     data.id = result.insertId;
     const io = req.app.get('io');
 
+    // Recibirá escritorio qué ya se subió una nueva foto con arduino, 
+    // para procesarla y devolver el resultado a android.
     io.emit('nueva-foto', {
       id: data.id,
       nombre_guardado: data.nombre_guardado,
