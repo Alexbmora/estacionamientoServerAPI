@@ -1,4 +1,7 @@
 import db from '../config/db.js';
+import path from 'path'; 
+import fs from 'fs';
+import { UPLOADS_DIR } from '../middlewares/upload.js';
 
 export const subirFoto = (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se envió ninguna imagen' });
@@ -20,19 +23,27 @@ export const subirFoto = (req, res) => {
       return res.status(500).json({ error: 'Error guardando en BD' });
     }
 
-    data.id = result.insertId;
+    const idRow = result && result[0] && result[0].length > 0 ? result[0][0] : null;
+
+    if (!idRow || !idRow.id) {
+      console.error('Error: No se pudo recuperar el ID de la foto del Stored Procedure.');
+      return res.status(500).json({ error: 'Error interno: No se pudo obtener el ID de la foto.' });
+    }
+
+    // Asignar el ID recuperado del Stored Procedure
+    data.id = idRow.id;
+    // ----------------------------------------------------------
+
     const io = req.app.get('io');
 
-    // Recibirá escritorio qué ya se subió una nueva foto con arduino, 
-    // para procesarla y devolver el resultado a android.
+    // Emisión a Python (ahora con el ID correcto)
     io.emit('nueva-foto', {
-      id: data.id,
+      id: data.id, // ¡Ahora tiene el ID correcto!
       nombre_guardado: data.nombre_guardado,
     });
 
     res.json({ mensaje: 'Foto subida correctamente', foto: data });
-  }
-  );
+  });
 };
 
 export const descargarFotoData = (req, res) => {
